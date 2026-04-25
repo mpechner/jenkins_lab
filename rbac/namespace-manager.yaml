@@ -1,0 +1,105 @@
+# RBAC for the Jenkins agent pods that need to create namespaces and
+# manage resources inside those namespaces.
+#
+# Scope: narrow in production. For the lab we grant:
+#   - Cluster-level: create/delete/label namespaces
+#   - Within any namespace: full control (so jobs can deploy into the
+#     ephemeral namespaces they create)
+#
+# In production, use a policy engine (Kyverno / OPA Gatekeeper) to restrict
+# this to only namespaces labeled ephemeral=true.
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jenkins-agents
+  labels:
+    purpose: jenkins-build-agents
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jenkins-test-runner
+  namespace: jenkins-agents
+
+---
+# Cluster-wide: allow creating/managing namespaces and cluster-scoped ops
+# that our test stacks may need (e.g. listing nodes for scheduling checks).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jenkins-namespace-manager
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["create", "get", "list", "delete", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+  # For reading events and debugging scheduling issues
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  # ResourceQuota and LimitRange are excluded from the built-in 'admin'
+  # ClusterRole (cluster admins manage them in real clusters). Pipeline 03
+  # creates a ResourceQuota in its ephemeral namespace, so we add it here.
+  - apiGroups: [""]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["create", "get", "list", "delete", "patch", "update"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jenkins-namespace-manager
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-test-runner
+    namespace: jenkins-agents
+roleRef:
+  kind: ClusterRole
+  name: jenkins-namespace-manager
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Within-namespace admin: allow the SA to manage pods/services/deployments/
+# configmaps/secrets/etc inside namespaces.
+#
+# This is a ClusterRole but we bind it at namespace level in the pipelines
+# by creating a RoleBinding in each ephemeral namespace. For the lab we
+# take a shortcut: bind it cluster-wide so pipelines "just work".
+#
+# TIGHTEN THIS IN PRODUCTION.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jenkins-in-namespace-admin
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-test-runner
+    namespace: jenkins-agents
+roleRef:
+  kind: ClusterRole
+  name: admin      # built-in k8s ClusterRole with namespace-level admin rights
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# The Jenkins controller (SA: jenkins/jenkins) runs the kubernetes-plugin which
+# creates agent pods in the 'jenkins-agents' namespace. The Helm chart's default
+# RBAC only covers the 'jenkins' namespace, so without this binding the
+# controller gets HTTP 403 listing/creating pods in jenkins-agents.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-controller-agents-admin
+  namespace: jenkins-agents
+subjects:
+  - kind: ServiceAccount
+    name: jenkins
+    namespace: jenkins
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io

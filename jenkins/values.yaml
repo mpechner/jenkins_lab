@@ -1,0 +1,77 @@
+# Helm values for the official Jenkins chart.
+# Chart: https://github.com/jenkinsci/helm-charts/tree/main/charts/jenkins
+#
+# Goals:
+#   - Modest resource footprint for a Mac laptop.
+#   - Exposed as NodePort 30080 so kind's port mapping forwards localhost:8080.
+#   - Kubernetes plugin pre-configured to use the 'jenkins-agents' namespace.
+#   - Latest LTS image, JCasC for a minimal baseline config.
+
+controller:
+  # Modest resources. Bump if your Mac has plenty of RAM.
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
+
+  # Expose via NodePort mapped through kind to localhost:8080.
+  serviceType: NodePort
+  nodePort: 30080
+
+  # Default admin user (password is auto-generated and readable via kubectl).
+  admin:
+    username: "admin"
+
+  # Pre-install plugins we use in the lab.
+  installPlugins:
+    - kubernetes:latest
+    - workflow-aggregator:latest
+    - git:latest
+    - configuration-as-code:latest
+    - job-dsl:latest
+    - credentials-binding:latest
+    - pipeline-stage-view:latest
+
+  # Don't try to upgrade plugins on every pod restart - faster boot.
+  installLatestPlugins: false
+  installLatestSpecifiedPlugins: false
+
+  # JCasC baseline. Adds a second kubernetes cloud configuration pointing
+  # agents to the 'jenkins-agents' namespace with the jenkins-test-runner SA.
+  # The chart auto-creates a cloud named "kubernetes" in the 'jenkins' namespace;
+  # we add 'kubernetes-agents' for our per-build pods.
+  JCasC:
+    defaultConfig: true
+    configScripts:
+      lab-clouds: |
+        jenkins:
+          clouds:
+            - kubernetes:
+                name: "kubernetes-agents"
+                serverUrl: "https://kubernetes.default"
+                namespace: "jenkins-agents"
+                jenkinsUrl: "http://jenkins.jenkins.svc.cluster.local:8080"
+                jenkinsTunnel: "jenkins-agent.jenkins.svc.cluster.local:50000"
+                containerCapStr: "20"
+                connectTimeout: 30
+                readTimeout: 60
+                templates: []
+
+agent:
+  # The default 'inbound-agent' image is fine for the basic pod template.
+  # Our pipelines will override with per-job pod specs anyway.
+  enabled: true
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "512Mi"
+
+persistence:
+  enabled: true
+  size: "4Gi"

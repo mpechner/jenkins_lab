@@ -1,0 +1,34 @@
+# kind cluster config: 1 control-plane + 3 workers, with port mappings for Jenkins.
+#
+# The extraPortMappings forward from your Mac to the cluster's worker-0 node,
+# so you can hit Jenkins at http://localhost:8080 on your Mac once a NodePort
+# service is in place.
+#
+# Docs: https://kind.sigs.k8s.io/docs/user/configuration/
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: jenkins-lab
+
+nodes:
+  - role: control-plane
+    # Ingress-ready label so you could install ingress-nginx later if desired.
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # Map host 8080 -> NodePort 30080 on control plane (we route Jenkins here).
+      - containerPort: 30080
+        hostPort: 8080
+        protocol: TCP
+      # JNLP agent port, in case you later want a controller outside the cluster.
+      - containerPort: 30050
+        hostPort: 50000
+        protocol: TCP
+
+  - role: worker
+  - role: worker
+  - role: worker

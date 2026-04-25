@@ -1,0 +1,4 @@
+- [User profile](user_role.md) — senior platform/devops engineer; skip 101-level explanations
+- [Verify before claiming "this works"](feedback_verify_before_claiming.md) — exercise the path; don't declare readiness from structural reading
+- [Avoid bitnami/* container images](feedback_no_bitnami.md) — Broadcom-relicensed; use first-party / Docker Hub Official Library / alpine/k8s
+- [Keep README in sync with script/code changes](feedback_keep_docs_in_sync.md) — update docs in the same turn, place them where a reader encounters the need
