@@ -1,0 +1,37 @@
+# Backups contain credentials (encrypted with Jenkins' master key,
+# but still sensitive). Never commit.
+backups/
+
+# Local environment files — likely place to drop a DOCKERHUB_TOKEN,
+# kubeconfig path, or other per-developer config.
+.env
+.env.*
+!.env.example
+
+# Credentials, certs, keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+.secrets/
+
+# Kubeconfigs copied locally (e.g. exported from kind)
+kubeconfig
+kubeconfig-*
+*.kubeconfig
+.kube/
+
+# Docker auth (in case anyone copies their personal config in)
+.docker/
+
+# Tokens / kubectl token files
+*.token
+
+# Mac noise
+.DS_Store
+
+# IDE noise
+.idea/
+.vscode/
