@@ -35,6 +35,7 @@ pipeline {
 
   options {
     timeout(time: 10, unit: 'MINUTES')
+    ansiColor('xterm')
   }
 
   stages {
@@ -42,10 +43,10 @@ pipeline {
       steps {
         container('kubectl') {
           sh '''
+            printf "\\033[36m▶ Identifying agent pod\\033[0m\\n"
             echo "Running in pod: $HOSTNAME"
-            echo "Namespace:"
-            cat /var/run/secrets/kubernetes.io/serviceaccount/namespace
-            echo ""
+            echo "Namespace: $(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+            printf "\\033[32m✓ Pod identified\\033[0m\\n"
           '''
         }
       }
@@ -53,7 +54,12 @@ pipeline {
     stage('List cluster nodes') {
       steps {
         container('kubectl') {
-          sh 'kubectl get nodes -o wide'
+          sh '''
+            printf "\\033[36m▶ Listing cluster nodes\\033[0m\\n"
+            kubectl get nodes -o wide
+            count=$(kubectl get nodes --no-headers | wc -l | tr -d " ")
+            printf "\\033[32m✓ %s nodes Ready\\033[0m\\n" "$count"
+          '''
         }
       }
     }
@@ -61,7 +67,15 @@ pipeline {
       steps {
         container('kubectl') {
           // Should print 'yes' if RBAC is set up correctly.
-          sh 'kubectl auth can-i -n default create namespaces'
+          sh '''
+            printf "\\033[36m▶ Checking RBAC: namespaces/create\\033[0m\\n"
+            if kubectl auth can-i -n default create namespaces | grep -q yes; then
+              printf "\\033[32m✓ Allowed: SA can create namespaces\\033[0m\\n"
+            else
+              printf "\\033[31m✗ Denied: SA cannot create namespaces — RBAC misconfigured\\033[0m\\n"
+              exit 1
+            fi
+          '''
         }
       }
     }

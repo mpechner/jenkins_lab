@@ -32,6 +32,10 @@ pipeline {
     }
   }
 
+  options {
+    ansiColor('xterm')
+  }
+
   environment {
     TEST_NS = "systest-heavy-${env.BUILD_NUMBER}"
   }
@@ -41,10 +45,12 @@ pipeline {
       steps {
         container('kubectl') {
           sh '''
+            printf "\\033[36m▶ Creating namespace %s\\033[0m\\n" "$TEST_NS"
             kubectl create namespace $TEST_NS
             kubectl label ns $TEST_NS ephemeral=true \
               jenkins-build=$BUILD_NUMBER \
               workload-class=systemtest
+            printf "\\033[32m✓ Namespace ready\\033[0m\\n"
           '''
         }
       }
@@ -54,14 +60,20 @@ pipeline {
       steps {
         container('kubectl') {
           sh '''
+            printf "\\033[36m▶ Deploying web (3 replicas)\\033[0m\\n"
             kubectl create deployment web --image=nginx:1.27-alpine \
               --replicas=3 -n $TEST_NS
             kubectl set resources deploy/web -n $TEST_NS \
               --requests=cpu=100m,memory=64Mi \
               --limits=cpu=300m,memory=128Mi
             kubectl expose deployment web --port=80 -n $TEST_NS
-            kubectl wait --for=condition=available deploy/web \
-              -n $TEST_NS --timeout=120s
+            if kubectl wait --for=condition=available deploy/web \
+                 -n $TEST_NS --timeout=120s; then
+              printf "\\033[32m✓ web Deployment available (3/3)\\033[0m\\n"
+            else
+              printf "\\033[31m✗ web Deployment did not become available\\033[0m\\n"
+              exit 1
+            fi
           '''
         }
       }
@@ -71,14 +83,20 @@ pipeline {
       steps {
         container('kubectl') {
           sh '''
-            kubectl run tester --image=curlimages/curl:8.8.0 \
-              --restart=Never --rm -i -n $TEST_NS \
-              --command -- sh -c '
-                for i in 1 2 3 4 5; do
-                  curl -sSf http://web > /dev/null && echo "request $i ok"
-                  sleep 1
-                done
-              '
+            printf "\\033[36m▶ Hitting web 5 times\\033[0m\\n"
+            if kubectl run tester --image=curlimages/curl:8.8.0 \
+                 --restart=Never --rm -i -n $TEST_NS \
+                 --command -- sh -c '
+                   for i in 1 2 3 4 5; do
+                     curl -sSf http://web > /dev/null && printf "\\033[32m✓ request %s ok\\033[0m\\n" "$i"
+                     sleep 1
+                   done
+                 '; then
+              printf "\\033[32m✓ Test suite passed\\033[0m\\n"
+            else
+              printf "\\033[31m✗ Test suite failed\\033[0m\\n"
+              exit 1
+            fi
           '''
         }
       }
@@ -88,7 +106,10 @@ pipeline {
   post {
     always {
       container('kubectl') {
-        sh 'kubectl delete namespace $TEST_NS --wait=false || true'
+        sh '''
+          printf "\\033[33m! Tearing down %s\\033[0m\\n" "$TEST_NS"
+          kubectl delete namespace $TEST_NS --wait=false || true
+        '''
       }
     }
   }

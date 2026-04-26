@@ -34,6 +34,7 @@ controller:
     - job-dsl:latest
     - credentials-binding:latest
     - pipeline-stage-view:latest
+    - ansicolor:latest
 
   # Don't try to upgrade plugins on every pod restart - faster boot.
   installLatestPlugins: false

@@ -30,22 +30,30 @@ pipeline {
     }
   }
 
+  options {
+    ansiColor('xterm')
+  }
+
   stages {
     stage('Compile simulation') {
       steps {
         container('maven') {
           sh '''
-            echo "Running compile job on $(hostname)"
+            printf "\\033[36m▶ Compile job on %s\\033[0m\\n" "$(hostname)"
             mvn --version
             # Simulate a build by generating a throwaway project.
             mkdir -p /tmp/demo && cd /tmp/demo
-            mvn -B -q archetype:generate \
-              -DgroupId=com.example -DartifactId=demo \
-              -DarchetypeArtifactId=maven-archetype-quickstart \
-              -DarchetypeVersion=1.4 -DinteractiveMode=false
-            cd demo && mvn -B -q package
-            echo "Build artifact:"
-            ls -la target/*.jar
+            if mvn -B -q archetype:generate \
+                 -DgroupId=com.example -DartifactId=demo \
+                 -DarchetypeArtifactId=maven-archetype-quickstart \
+                 -DarchetypeVersion=1.4 -DinteractiveMode=false \
+               && cd demo && mvn -B -q package; then
+              printf "\\033[32m✓ Build succeeded — artifact:\\033[0m\\n"
+              ls -la target/*.jar
+            else
+              printf "\\033[31m✗ Build failed\\033[0m\\n"
+              exit 1
+            fi
           '''
         }
       }

@@ -31,17 +31,21 @@ pipeline {
     }
   }
 
+  options {
+    ansiColor('xterm')
+  }
+
   stages {
     stage('Tiny job') {
       steps {
         container('bash') {
           sh '''
-            echo "Running tiny bash job on $(hostname)"
+            printf "\\033[36m▶ Tiny bash job on %s\\033[0m\\n" "$(hostname)"
             for i in 1 2 3 4 5; do
               echo "tick $i"
               sleep 2
             done
-            echo "done"
+            printf "\\033[32m✓ Tiny job complete\\033[0m\\n"
           '''
         }
       }

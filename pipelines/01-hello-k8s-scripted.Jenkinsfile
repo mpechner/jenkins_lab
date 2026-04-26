@@ -30,24 +30,39 @@ podTemplate(
 ) {
   node(POD_LABEL) {
     timeout(time: 10, unit: 'MINUTES') {
-      stage('Who am I') {
-        container('kubectl') {
-          sh '''
-            echo "Running in pod: $HOSTNAME"
-            echo "Namespace:"
-            cat /var/run/secrets/kubernetes.io/serviceaccount/namespace
-            echo ""
-          '''
+      ansiColor('xterm') {
+        stage('Who am I') {
+          container('kubectl') {
+            sh '''
+              printf "\\033[36m▶ Identifying agent pod\\033[0m\\n"
+              echo "Running in pod: $HOSTNAME"
+              echo "Namespace: $(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+              printf "\\033[32m✓ Pod identified\\033[0m\\n"
+            '''
+          }
         }
-      }
-      stage('List cluster nodes') {
-        container('kubectl') {
-          sh 'kubectl get nodes -o wide'
+        stage('List cluster nodes') {
+          container('kubectl') {
+            sh '''
+              printf "\\033[36m▶ Listing cluster nodes\\033[0m\\n"
+              kubectl get nodes -o wide
+              count=$(kubectl get nodes --no-headers | wc -l | tr -d " ")
+              printf "\\033[32m✓ %s nodes Ready\\033[0m\\n" "$count"
+            '''
+          }
         }
-      }
-      stage('Can I create namespaces?') {
-        container('kubectl') {
-          sh 'kubectl auth can-i -n default create namespaces'
+        stage('Can I create namespaces?') {
+          container('kubectl') {
+            sh '''
+              printf "\\033[36m▶ Checking RBAC: namespaces/create\\033[0m\\n"
+              if kubectl auth can-i -n default create namespaces | grep -q yes; then
+                printf "\\033[32m✓ Allowed\\033[0m\\n"
+              else
+                printf "\\033[31m✗ Denied — RBAC misconfigured\\033[0m\\n"
+                exit 1
+              fi
+            '''
+          }
         }
       }
     }

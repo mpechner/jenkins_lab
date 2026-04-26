@@ -16,6 +16,9 @@ pipeline {
 
   options {
     timeout(time: 30, unit: 'MINUTES')
+    // Keep consistent with other lab pipelines. The orchestrator itself
+    // doesn't print colored output (agent none), but the children do.
+    ansiColor('xterm')
   }
 
   stages {

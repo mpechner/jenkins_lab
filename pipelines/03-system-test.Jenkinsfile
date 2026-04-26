@@ -35,6 +35,7 @@ pipeline {
 
   options {
     timeout(time: 20, unit: 'MINUTES')
+    ansiColor('xterm')
   }
 
   environment {
@@ -48,6 +49,7 @@ pipeline {
           // Heredoc body must be left-aligned: <<EOF preserves leading
           // whitespace and YAML's '---' / root keys break with indentation.
           sh '''
+            printf "\\033[36m▶ Creating namespace %s with quota+limitrange\\033[0m\\n" "$TEST_NS"
             kubectl create namespace $TEST_NS
             kubectl label namespace $TEST_NS ephemeral=true \
               jenkins-build=$BUILD_NUMBER \
@@ -84,6 +86,7 @@ spec:
         cpu: "50m"
         memory: "64Mi"
 EOF
+            printf "\\033[32m✓ Namespace %s ready (quota + limitrange applied)\\033[0m\\n" "$TEST_NS"
           '''
         }
       }
@@ -97,6 +100,7 @@ EOF
           // Heredoc bodies are left-aligned (column 0): <<EOF preserves
           // leading whitespace and YAML's '---' separator only works there.
           sh '''
+            printf "\\033[36m▶ Deploying postgres + redis + app + mock-api\\033[0m\\n"
             # Deploy postgres
 cat <<EOF | kubectl apply -n $TEST_NS -f -
 apiVersion: apps/v1
@@ -206,6 +210,7 @@ spec:
   selector: { app: mock-api }
   ports: [{ port: 80, targetPort: 80 }]
 EOF
+            printf "\\033[32m✓ All four manifests applied\\033[0m\\n"
           '''
         }
       }
@@ -215,10 +220,16 @@ EOF
       steps {
         container('kubectl') {
           sh '''
-            kubectl wait --for=condition=available deployment --all \
-              -n $TEST_NS --timeout=180s
-            kubectl rollout status statefulset/postgres -n $TEST_NS --timeout=180s
-            kubectl get all -n $TEST_NS
+            printf "\\033[36m▶ Waiting for deployments + statefulset to be ready\\033[0m\\n"
+            if kubectl wait --for=condition=available deployment --all \
+                 -n $TEST_NS --timeout=180s \
+               && kubectl rollout status statefulset/postgres -n $TEST_NS --timeout=180s; then
+              kubectl get all -n $TEST_NS
+              printf "\\033[32m✓ All four services ready\\033[0m\\n"
+            else
+              printf "\\033[31m✗ One or more services failed to become ready\\033[0m\\n"
+              exit 1
+            fi
           '''
         }
       }
@@ -228,20 +239,25 @@ EOF
       steps {
         container('kubectl') {
           sh '''
-            # Run a test pod that exercises each service.
-            kubectl run tests \
-              --image=curlimages/curl:8.8.0 \
-              --restart=Never \
-              --rm -i \
-              -n $TEST_NS \
-              --command -- sh -c '
-                set -e
-                echo "== Testing app =="
-                curl -sSf http://app | head -3
-                echo "== Testing mock-api =="
-                curl -sSf http://mock-api | head -3
-                echo "All service endpoints responding."
-              '
+            printf "\\033[36m▶ Running integration test pod\\033[0m\\n"
+            if kubectl run tests \
+                 --image=curlimages/curl:8.8.0 \
+                 --restart=Never \
+                 --rm -i \
+                 -n $TEST_NS \
+                 --command -- sh -c '
+                   set -e
+                   printf "\\033[36m== Testing app ==\\033[0m\\n"
+                   curl -sSf http://app | head -3
+                   printf "\\033[36m== Testing mock-api ==\\033[0m\\n"
+                   curl -sSf http://mock-api | head -3
+                   printf "\\033[32m✓ All service endpoints responding\\033[0m\\n"
+                 '; then
+              printf "\\033[32m✓ Integration tests passed\\033[0m\\n"
+            else
+              printf "\\033[31m✗ Integration tests failed\\033[0m\\n"
+              exit 1
+            fi
           '''
         }
       }
@@ -252,17 +268,20 @@ EOF
     failure {
       container('kubectl') {
         sh '''
-          echo "=== FAILURE DIAGNOSTICS ==="
+          printf "\\033[31m✗✗✗ FAILURE DIAGNOSTICS ✗✗✗\\033[0m\\n"
           kubectl get all -n $TEST_NS || true
           kubectl describe pods -n $TEST_NS || true
-          echo "=== Recent events ==="
+          printf "\\033[33m! Recent events\\033[0m\\n"
           kubectl get events -n $TEST_NS --sort-by=.lastTimestamp | tail -30 || true
         '''
       }
     }
     always {
       container('kubectl') {
-        sh 'kubectl delete namespace $TEST_NS --wait=false || true'
+        sh '''
+          printf "\\033[33m! Tearing down %s\\033[0m\\n" "$TEST_NS"
+          kubectl delete namespace $TEST_NS --wait=false || true
+        '''
       }
     }
   }
